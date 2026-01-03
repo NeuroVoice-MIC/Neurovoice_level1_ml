@@ -1,7 +1,6 @@
 numpy
 pandas
-scipy
-librosa
-joblib
 scikit-learn
+joblib
+librosa
 praat-parselmouth
