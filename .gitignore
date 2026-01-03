@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+venv/
+.env
+*.pkl
+*.joblib
+
+# Node
+node_modules/
+
+# Flutter
+build/
+.dart_tool/
+
+# OS
+.DS_Store
