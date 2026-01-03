@@ -2,19 +2,48 @@ const express = require("express");
 const multer = require("multer");
 const { execFile } = require("child_process");
 const path = require("path");
+const fs = require("fs");
+const cors = require("cors");
 
 const app = express();
-app.use(require("cors")());
+app.use(cors());
 
-const upload = multer({ dest: "../temp_audio/" });
+// =====================
+// PATHS (ABSOLUTE)
+// =====================
+const TEMP_DIR = path.join(__dirname, "..", "temp_audio");
+const PYTHON_SCRIPT = path.join(__dirname, "..", "python", "inference.py");
+
+// =====================
+// ENSURE TEMP DIR EXISTS
+// =====================
+if (!fs.existsSync(TEMP_DIR)) {
+  fs.mkdirSync(TEMP_DIR, { recursive: true });
+}
+
+// =====================
+// MULTER SETUP
+// =====================
+const upload = multer({
+  dest: TEMP_DIR,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+});
+
+// =====================
+// HEALTH CHECK
+// =====================
 app.get("/", (req, res) => {
   res.send("Server alive");
 });
+
+// =====================
+// PREDICT ENDPOINT
+// =====================
 app.post("/predict", upload.single("audio"), (req, res) => {
   console.log("📥 Request received");
 
   if (!req.file) {
-    console.log("❌ No file received");
+    console.error("❌ No audio file received");
     return res.status(400).json({ error: "No audio file" });
   }
 
@@ -23,26 +52,41 @@ app.post("/predict", upload.single("audio"), (req, res) => {
 
   execFile(
     "python3",
-    ["../python/inference.py", audioPath],
+    [PYTHON_SCRIPT, audioPath],
     { timeout: 20000 },
     (error, stdout, stderr) => {
-      console.log("🐍 Python finished");
+      // cleanup temp audio
+      fs.unlink(audioPath, () => {});
 
       if (stderr) {
-        console.error("⚠️ Python stderr:", stderr);
+        console.warn("⚠️ Python stderr:", stderr);
       }
 
       if (error) {
-        console.error("❌ Python error:", error);
+        console.error("❌ Python execution error:", error);
         return res.status(500).json({ error: "Inference failed" });
       }
 
-      console.log("📤 Python output:", stdout);
-      res.json(JSON.parse(stdout));
+      let result;
+      try {
+        result = JSON.parse(stdout.trim());
+      } catch (e) {
+        console.error("❌ Invalid JSON from Python:", stdout);
+        return res.status(500).json({
+          error: "Invalid inference output",
+          raw: stdout,
+        });
+      }
+
+      console.log("📤 Python output:", result);
+      res.json(result);
     }
   );
 });
 
+// =====================
+// START SERVER (RENDER SAFE)
+// =====================
 const PORT = process.env.PORT || 5050;
 
 app.listen(PORT, () => {
