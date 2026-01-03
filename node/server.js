@@ -43,6 +43,8 @@ app.post("/predict", upload.single("audio"), (req, res) => {
   );
 });
 
-app.listen(5050, () => {
-  console.log("🚀 NeuroVoice backend running on port 5000");
+const PORT = process.env.PORT || 5050;
+
+app.listen(PORT, () => {
+  console.log(`🚀 NeuroVoice backend running on port ${PORT}`);
 });
