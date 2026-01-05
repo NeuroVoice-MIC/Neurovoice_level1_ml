@@ -1,50 +1,97 @@
-# inference.py
+# inference_v4.py
 import warnings
 warnings.filterwarnings(
     "ignore",
     category=UserWarning,
     module="sklearn"
 )
+
 import sys
 import json
 import joblib
-import pandas as pd
-from audio_preprocess import load_audio
+import os
+
 from praat_features import extract_praat_features
 from feature_engineering import build_feature_vector
 
-import os
+# -------------------------------
+# CONFIG
+# -------------------------------
+SCREENING_THRESHOLD = 0.30
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(BASE_DIR, "model")
 
-model = joblib.load(os.path.join(MODEL_DIR, "logreg_model.joblib"))
+# Load v4-lite model
+model = joblib.load(
+    os.path.join(MODEL_DIR, "logreg_model_v4.joblib")
+)
 
-
-
-with open(os.path.join(MODEL_DIR, "feature_columns.json")) as f:
+# Load v4-lite feature list (IMPORTANT)
+with open(os.path.join(MODEL_DIR, "feature_cols_v4_calibrated.json")) as f:
     feature_cols = json.load(f)
 
-def predict(audio_path):
+# -------------------------------
+# DEFAULT METADATA (for CLI demo)
+# -------------------------------
+DEFAULT_META = {
+    "ac": 0,
+    "nth": 1,
+    "htn": 0,
+    "updrs": 0
+}
 
+# -------------------------------
+# PREDICTION FUNCTION
+# -------------------------------
+def predict(audio_path, meta=DEFAULT_META):
+
+    # Extract audio features (Praat)
     praat_feats = extract_praat_features(audio_path)
+
+    # Merge clinical metadata
+    praat_feats.update({
+        "ac": meta["ac"],
+        "nth": meta["nth"],
+        "htn": meta["htn"],
+        "updrs": meta["updrs"]
+    })
+
+    # Align features exactly as training
     X = build_feature_vector(praat_feats, feature_cols)
-    
+
+    # Predict probability
     prob = model.predict_proba(X)[0][1]
     prob = max(0.01, min(0.99, prob))
 
+    # Screening decision
+    screening_positive = prob >= SCREENING_THRESHOLD
 
-    risk_score = float(prob)
     return {
-    "risk_score": round(risk_score, 3),
-    "risk_level": (
-        "Low" if risk_score < 0.33 else
-        "Medium" if risk_score < 0.66 else
-        "High"
-    )
+        "risk_score": round(float(prob), 3),
+        "risk_level": (
+            "Low" if prob < 0.33 else
+            "Medium" if prob < 0.66 else
+            "High"
+        )
     }
 
+# -------------------------------
+# CLI ENTRY POINT
+# -------------------------------
 if __name__ == "__main__":
     audio_path = sys.argv[1]
-    result = predict(audio_path)
-    print(json.dumps(result))
+
+    # Optional metadata from CLI
+    if len(sys.argv) == 6:
+        meta = {
+            "ac": int(sys.argv[2]),
+            "nth": int(sys.argv[3]),
+            "htn": int(sys.argv[4]),
+            "updrs": float(sys.argv[5])
+        }
+    else:
+        meta = DEFAULT_META
+
+    result = predict(audio_path, meta)
+    print(json.dumps(result, indent=2))
