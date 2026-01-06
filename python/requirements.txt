@@ -1,6 +1,8 @@
 numpy
+scipy
 pandas
-scikit-learn
 joblib
 librosa
+soundfile
 praat-parselmouth
+scikit-learn

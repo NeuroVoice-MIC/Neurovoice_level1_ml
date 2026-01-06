@@ -1,29 +1,50 @@
+# ===============================
+# Base image
+# ===============================
 FROM python:3.10-slim
 
-# Install system dependencies for Praat
+# ===============================
+# Install system dependencies
+# ===============================
 RUN apt-get update && apt-get install -y \
-    praat \
     ffmpeg \
     libsndfile1 \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
 
+# ===============================
 # Set working directory
+# ===============================
 WORKDIR /app
 
-# Copy everything
+# ===============================
+# Copy project
+# ===============================
 COPY . .
 
+# ===============================
 # Install Python dependencies
+# ===============================
 RUN pip install --no-cache-dir -r python/requirements.txt
 
-# Install Node
-RUN apt-get update && apt-get install -y nodejs npm
-
+# ===============================
 # Install Node dependencies
-RUN cd node && npm install
+# ===============================
+WORKDIR /app/node
+RUN npm install
 
-# Expose Render port
-EXPOSE 10000
+# ===============================
+# Back to root
+# ===============================
+WORKDIR /app
 
-# Start Node server
-CMD ["sh", "-c", "cd node && node server.js"]
+# ===============================
+# Expose port (Render-safe)
+# ===============================
+EXPOSE 5050
+
+# ===============================
+# Start server
+# ===============================
+CMD ["node", "node/server.js"]

@@ -16,6 +16,8 @@ const { container } = require("./db/cosmos"); // NEW
 
 const app = express();
 app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // =====================
 // PATHS (ABSOLUTE)
@@ -60,7 +62,7 @@ app.post("/predict", upload.single("audio"), async (req, res) => {
   console.log("🎧 Audio path:", audioPath);
 
   execFile(
-      "C:\\Users\\HP\\miniconda3\\envs\\neurovoice\\python.exe",
+      "python3",
     [PYTHON_SCRIPT, audioPath],
     { timeout: 20000 },
     async (error, stdout, stderr) => {
