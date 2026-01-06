@@ -1,9 +1,18 @@
+// =====================
+// EXISTING IMPORTS
+// =====================
 const express = require("express");
 const multer = require("multer");
 const { execFile } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const cors = require("cors");
+
+// =====================
+// 🔹 NEW: ENV + COSMOS
+// =====================
+require("dotenv").config(); // NEW
+const { container } = require("./db/cosmos"); // NEW
 
 const app = express();
 app.use(cors());
@@ -39,7 +48,7 @@ app.get("/", (req, res) => {
 // =====================
 // PREDICT ENDPOINT
 // =====================
-app.post("/predict", upload.single("audio"), (req, res) => {
+app.post("/predict", upload.single("audio"), async (req, res) => {
   console.log("📥 Request received");
 
   if (!req.file) {
@@ -51,10 +60,10 @@ app.post("/predict", upload.single("audio"), (req, res) => {
   console.log("🎧 Audio path:", audioPath);
 
   execFile(
-    "python3",
+      "C:\\Users\\HP\\miniconda3\\envs\\neurovoice\\python.exe",
     [PYTHON_SCRIPT, audioPath],
     { timeout: 20000 },
-    (error, stdout, stderr) => {
+    async (error, stdout, stderr) => {
       // cleanup temp audio
       fs.unlink(audioPath, () => {});
 
@@ -79,7 +88,48 @@ app.post("/predict", upload.single("audio"), (req, res) => {
       }
 
       console.log("📤 Python output:", result);
-      res.json(result);
+
+      // =====================
+      // 🔹 NEW: SAVE TO COSMOS DB
+      // =====================
+      const sessionItem = {
+        id: `session_${Date.now()}`,
+        userId: req.body?.userId || "anonymous_user",
+
+        inputs: {
+          age_binary: req.body?.age_binary ?? null,
+          neurological_history: req.body?.neurological_history ?? null,
+          hypertension: req.body?.hypertension ?? null,
+          updrs: req.body?.updrs ?? null,
+        },
+
+        voice_ml: {
+          tremor_probability: result.tremor_probability,
+          severity: result.severity,
+        },
+
+        motion_ml: {
+          tremor_detected: result.tremor_detected,
+          frequency_hz: result.frequency_hz,
+        },
+
+        created_at: new Date().toISOString(),
+      };
+
+      try {
+        await container.items.create(sessionItem);
+        console.log("✅ Session saved to Cosmos DB");
+      } catch (dbError) {
+        console.error("❌ Cosmos DB save failed:", dbError);
+      }
+
+      // =====================
+      // RETURN RESPONSE
+      // =====================
+      res.json({
+        ...result,
+        session_id: sessionItem.id,
+      });
     }
   );
 });
